@@ -277,13 +277,18 @@ export default function RadarClient({ initialCompanies, lastRun }: Props) {
     lastRun?.completed_at || lastRun?.started_at || null
   );
 
+  // Always fetch latest companies from API on mount (SSR may have failed silently)
   useEffect(() => {
-    const shouldScrape =
-      !lastRun ||
-      (lastRun.status === "completed" &&
-        Date.now() - new Date(lastRun.started_at).getTime() > 4 * 60 * 60 * 1000) ||
-      lastRun.status === "failed";
-    if (shouldScrape && companies.length === 0) triggerScrape();
+    async function loadCompanies() {
+      try {
+        const r = await fetch("/api/companies");
+        if (r.ok) {
+          const { companies: fresh } = await r.json();
+          if (fresh?.length) setCompanies(fresh);
+        }
+      } catch { /* ignore */ }
+    }
+    loadCompanies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -294,15 +299,14 @@ export default function RadarClient({ initialCompanies, lastRun }: Props) {
     try {
       const res = await fetch("/api/scrape", { method: "POST" });
       const data = await res.json();
-      if (data.success || data.companies_found != null) {
-        const r2 = await fetch("/api/companies");
-        if (r2.ok) {
-          const { companies: fresh } = await r2.json();
-          if (fresh?.length) setCompanies(fresh);
-        }
-        setRefreshTime(new Date().toISOString());
-        setScanStatus("completed");
+      // Always refresh companies after scrape attempt (success OR cooldown skip)
+      const r2 = await fetch("/api/companies");
+      if (r2.ok) {
+        const { companies: fresh } = await r2.json();
+        if (fresh?.length) setCompanies(fresh);
       }
+      setRefreshTime(new Date().toISOString());
+      setScanStatus(data.success ? "completed" : (data.message ? "completed" : "failed"));
     } catch {
       setScanStatus("failed");
     } finally {
