@@ -15,7 +15,9 @@ export type Database = {
 
 // Browser / server components — read-only (uses anon key, respects RLS)
 export function createClient() {
-  return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey);
+  return createSupabaseClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: { fetch: (url, opts = {}) => fetch(url, { ...opts, cache: "no-store" }) },
+  });
 }
 
 // API routes — read + write (uses service role, bypasses RLS)
